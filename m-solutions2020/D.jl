@@ -4,8 +4,6 @@
 # %% body
 # -------
 
-# TODO; refactor
-
 function main(io = stdin)
     readto(target = '\n') = readuntil(io, target)
     readnum(T::Type{<:Number} = Int; dlm = isspace, kwargs...) =
@@ -21,7 +19,7 @@ end
     p::Int = 1_000
     nstock::Int = 0
 
-    buy(Ai) = nstock, p = divrem(p, Ai)
+    buy(Ai) = (nstock, p = divrem(p, Ai))
     function sell(Ai)
         p += nstock * Ai
         nstock = 0

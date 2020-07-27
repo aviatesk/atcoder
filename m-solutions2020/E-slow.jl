@@ -49,39 +49,39 @@ See also: [`@collect`](@ref)
 macro generator end
 
 """
-    bruteforcesearch(n::Integer, b::Integer = 2)
     bruteforcesearch(f::Function, n::Integer, b::Integer = 2)
 
+Applies `f` for all the ...
 $(""#=TODO: add some equation here for the future reference=#)
 
 !!! note
     By default (i.e. when `b == 2`), this function is equivalent to bit-brute-force search.
 
 ```julia-repl
-julia> for gen in bruteforcesearch(3)
-           @show collect(gen)
-       end
-collect(gen) = [2, 1, 1]
-collect(gen) = [1, 2, 1]
-collect(gen) = [2, 2, 1]
-collect(gen) = [1, 1, 2]
-collect(gen) = [2, 1, 2]
-collect(gen) = [1, 2, 2]
-collect(gen) = [2, 2, 2]
-collect(gen) = [1, 1, 1]
+julia> bruteforcesearch(3) do comb
+           @show collect(comb)
+       end;
+collect(mask) = [2, 1, 1]
+collect(mask) = [1, 2, 1]
+collect(mask) = [2, 2, 1]
+collect(mask) = [1, 1, 2]
+collect(mask) = [2, 1, 2]
+collect(mask) = [1, 2, 2]
+collect(mask) = [2, 2, 2]
+collect(mask) = [1, 1, 1]
 
-julia> bruteforcesearch(2, 3) do gen
-           @show collect(gen)
-       end |> collect;
-collect(gen) = [2, 1]
-collect(gen) = [3, 1]
-collect(gen) = [1, 2]
-collect(gen) = [2, 2]
-collect(gen) = [3, 2]
-collect(gen) = [1, 3]
-collect(gen) = [2, 3]
-collect(gen) = [3, 3]
-collect(gen) = [1, 1]
+julia> bruteforcesearch(2, 3) do comb
+           @show collect(comb)
+       end;
+collect(mask) = [2, 1]
+collect(mask) = [3, 1]
+collect(mask) = [1, 2]
+collect(mask) = [2, 2]
+collect(mask) = [3, 2]
+collect(mask) = [1, 3]
+collect(mask) = [2, 3]
+collect(mask) = [3, 3]
+collect(mask) = [1, 1]
 ```
 """
 function bruteforcesearch end
@@ -121,42 +121,22 @@ macro collect(cond, ex) first(walk_and_transform(ex, cond)) end
 macro generator(ex) first(walk_and_transform(ex; gen = true)) end
 macro generator(cond, ex) first(walk_and_transform(ex, cond; gen = true)) end
 
-@inbounds begin
-
-function bruteforcesearch(n::Integer, b::Integer = 2)
+@inbounds function bruteforcesearch(f::Function, n::Integer, b::Integer = 2)
     baselen = length(string(b, base = 10))
-    return @generator for i = 1:b^n
+    @collect for i = 1:b^n
         s = reverse(string(i, pad = n, base = b))[1:n] # cut off the overflowed char when `i == base^n`
-        @generator for ns in partition(s, baselen)
+        comb = @generator for ns in partition(s, baselen)
             parse(Int, ns) + 1 # for 1-based indexing
         end
+        f(comb)
     end
 end
 
-function bruteforcesearch(f::Function, n::Integer, b::Integer = 2)
-    baselen = length(string(b, base = 10))
-    return @generator for i = 1:b^n
-        s = reverse(string(i, pad = n, base = b))[1:n] # cut off the overflowed char when `i == base^n`
-        gen = @generator for ns in partition(s, baselen)
-            parse(Int, ns) + 1 # for 1-based indexing
-        end
-        f(gen)
-    end
+partition(a, n) = @generator for i in 1:(length(a)÷n)
+    s = 1+n*(i-1)
+    e = n*i
+    a[s:e]
 end
-
-function partition(a, n)
-    return if n == 1
-        a
-    else
-        @collect for i in 1:(length(a)÷n)
-            s = 1+n*(i-1)
-            e = n*i
-            a[s:e]
-        end
-    end
-end
-
-end # @inbounds
 
 # %% constants
 # ------------
@@ -175,66 +155,43 @@ function main(io = stdin)
     println.(solve(N, XYPs))
 end
 
-@inbounds function solve(N, XYPs)
+function solve(N, XYPs)
     # TODO: precomputation
-    Xcaches = [Dict{UInt,Int}() for _ in 1:N]
-    Ycaches = [Dict{UInt,Int}() for _ in 1:N]
-
-    for roads in bruteforcesearch(N, 2)
-        Xs = Set(X for (road, (X, _)) in zip(roads, XYPs) if road == 1)
-        Ys = Set(Y for (road, (_, Y, _)) in zip(roads, XYPs) if road == 1)
-        push!(Xs, 0); push!(Ys, 0)
-        cache_distances!(XYPs, Xs, Ys, Xcaches, Ycaches)
-    end
-
     ret = [typemax(Int) for n in 0:N]
 
     # calculate shortest distances for all the candidates
-    for roads in bruteforcesearch(N, 3)
-        Xs = Set(0)
-        Ys = Set(0)
-        cnt = @generator for (road, (X, Y, _)) in zip(roads, XYPs)
+    bruteforcesearch(N, 3) do roads
+        Ys = [0]
+        Xs = [0]
+        cnt = @collect for (road, (X, Y, _)) in zip(roads, XYPs)
             if road == 1
                 push!(Xs, X)
                 1
             elseif road == 2
                 push!(Ys, Y)
                 1
-            else # no road here, no count
-                0
+            else road == 3
+                0 # no road here, no count
             end
         end |> sum
-        ret[cnt + 1] = min(ret[cnt + 1], sumup_distances(XYPs, Xs, Ys, Xcaches, Ycaches))
+        ret[cnt + 1] = min(ret[cnt + 1], sumup_distances(XYPs, Xs, Ys))
     end
 
     return ret
 end
 
-function cache_distances!(XYPs, Xs, Ys, Xcaches, Ycaches)
-    for ((X, Y, _), Xcache, Ycache) in zip(XYPs, Xcaches, Ycaches)
-        cache_distance!(Xcache, X, Xs)
-        cache_distance!(Ycache, Y, Ys)
-    end
-end
+sumup_distances(XYPs, Xs, Ys) = @generator for (X, Y, P) in XYPs
+    shortest_distance(X, Y, Xs, Ys) * P
+end |> sum
 
-function cache_distance!(cache, p, ps)
-    k = hash(ps)
-    haskey(cache, k) && return
-    cache[k] = shortest_distance(p, ps)
-end
-
-shortest_distance(p, ps) = minimum(abs(p - x) for x in ps)
-
-@inbounds function sumup_distances(XYPs, Xs, Ys, Xcaches, Ycaches)
-    xk = hash(Xs)
-    yk = hash(Ys)
-    return @generator for ((_, _, P), Xcache, Ycache) in zip(XYPs, Xcaches, Ycaches)
-        min(Xcache[xk], Ycache[yk]) * P
-    end |> sum
+function shortest_distance(X, Y, Xs, Ys)
+    xdist = minimum(abs(x - X) for x in Xs)
+    ydist = minimum(abs(y - Y) for y in Ys)
+    return min(xdist, ydist)
 end
 
 @static if @isdefined(Juno)
-    main(open(replace(@__FILE__, r"(.+)\.jl" => s"\1.in")))
+    main(open(normpath(@__DIR__, "E.in")))
 else
     main()
 end

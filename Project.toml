@@ -1,2 +1,4 @@
 [deps]
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+Lazy = "50d2b5c4-7a5e-59d5-8109-a42b560f39c0"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"

@@ -16,7 +16,7 @@ function solve()
     # ...
 end
 
-@static if @isdefined(Juno)
+@static if @isdefined(Juno) || @isdefined(VSCodeServer)
     main(open(replace(@__FILE__, r"(.+)\.jl" => s"\1.in")))
 else
     main()

@@ -49,36 +49,40 @@ macro generator end
     bruteforcesearch(n::Integer, b::Integer = 2)
     bruteforcesearch(f::Function, n::Integer, b::Integer = 2)
 
-$(""#=TODO: add some equation here for the future reference=#)
+Generates ``b^n`` brute force patterns.
 
 !!! note
     By default (i.e. when `b == 2`), this function is equivalent to bit-brute-force search.
+
+!!! warning
+    `b` must be within the range that `string(; base = b)` is accepted, i.e. ``2 ≤ b ≤ 63``
 
 ```julia-repl
 julia> for gen in bruteforcesearch(3)
            @show collect(gen)
        end
-collect(gen) = [2, 1, 1]
-collect(gen) = [1, 2, 1]
-collect(gen) = [2, 2, 1]
 collect(gen) = [1, 1, 2]
-collect(gen) = [2, 1, 2]
+collect(gen) = [1, 2, 1]
 collect(gen) = [1, 2, 2]
+collect(gen) = [2, 1, 1]
+collect(gen) = [2, 1, 2]
+collect(gen) = [2, 2, 1]
 collect(gen) = [2, 2, 2]
 collect(gen) = [1, 1, 1]
 
 julia> bruteforcesearch(2, 3) do gen
-           @show collect(gen)
-       end |> collect;
-collect(gen) = [2, 1]
-collect(gen) = [3, 1]
-collect(gen) = [1, 2]
-collect(gen) = [2, 2]
-collect(gen) = [3, 2]
-collect(gen) = [1, 3]
-collect(gen) = [2, 3]
-collect(gen) = [3, 3]
-collect(gen) = [1, 1]
+           collect(gen)
+       end |> collect
+ 9-element Vector{Vector{Int64}}:
+ [1, 2]
+ [1, 3]
+ [2, 1]
+ [2, 2]
+ [2, 3]
+ [3, 1]
+ [3, 2]
+ [3, 3]
+ [1, 1]
 ```
 """
 function bruteforcesearch end
@@ -118,39 +122,20 @@ macro collect(cond, ex) first(walk_and_transform(ex, cond)) end
 macro generator(ex) first(walk_and_transform(ex; gen = true)) end
 macro generator(cond, ex) first(walk_and_transform(ex, cond; gen = true)) end
 
-@inbounds begin
+bruteforcesearch(n::Integer, base::Integer = 2) = bruteforcesearch(identity, n, base)
+function bruteforcesearch(f::Function, n::Integer, base::Integer = 2)
+    m = base^n
 
-function bruteforcesearch(n::Integer, b::Integer = 2)
-    baselen = length(string(b, base = 10))
-    return @generator for i = 1:b^n
-        s = reverse(string(i, pad = n, base = b))[1:n] # cut off the overflowed char when `i == base^n`
-        @generator for ns in partition(s, baselen)
-            parse(Int, ns) + 1 # for 1-based indexing
+    return @generator for i = 1:m
+        s = if i == m
+            '0' ^ n # otherwise will be "100...000" (with length `n + 1`)
+        else
+            string(i; pad = n, base = base)
         end
-    end
-end
 
-function bruteforcesearch(f::Function, n::Integer, b::Integer = 2)
-    baselen = length(string(b, base = 10))
-    return @generator for i = 1:b^n
-        s = reverse(string(i, pad = n, base = b))[1:n] # cut off the overflowed char when `i == base^n`
-        gen = @generator for ns in partition(s, baselen)
-            parse(Int, ns) + 1 # for 1-based indexing
+        gen = @generator for c in s
+            parse(Int, c; base = base) + 1 # for 1-based indexing
         end
         f(gen)
     end
 end
-
-function partition(a, n)
-    return if n == 1
-        a
-    else
-        @collect for i in 1:(length(a)÷n)
-            s = 1+n*(i-1)
-            e = n*i
-            a[s:e]
-        end
-    end
-end
-
-end # @inbounds
